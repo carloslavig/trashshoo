@@ -1,0 +1,16 @@
+[package]
+name = "estoque"
+version = "1.0.0"
+edition = "2021"
+description = "Nucleo de estoque do Braniac Loja: lotes com validade (FEFO), historico imutavel, receitas e alertas. CLI JSON sobre SQLite."
+
+[dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

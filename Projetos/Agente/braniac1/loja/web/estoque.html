@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estoque — Líbano Esfiharia</title>
+<style>
+:root{--bg:#f4f1ec;--card:#fff;--tx:#2b2420;--mut:#7d7068;--bd:#e6ddd2;--ac:#c4161c;--ok:#1f8f4e;--am:#c77d00}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px system-ui,sans-serif}
+header{background:var(--ac);color:#fff;padding:14px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;flex:1}header a{color:#fff;font-size:14px}
+nav{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+nav button{border:1px solid var(--bd);background:#fff;border-radius:99px;padding:8px 14px;font:600 14px system-ui;white-space:nowrap;cursor:pointer}
+nav button.on{background:var(--tx);color:#fff;border-color:var(--tx)}
+main{padding:12px;max-width:900px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.lin{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.nome{font-weight:700}.mut{color:var(--mut);font-size:13px}.gr{font-size:26px;font-weight:800}
+.baixo{border-color:var(--am);background:#fff8ec}.venc{color:var(--ac);font-weight:700}
+.btn{border:0;background:var(--ac);color:#fff;border-radius:10px;padding:10px 14px;font:700 14px system-ui;cursor:pointer}
+.btn.c{background:#fff;color:var(--tx);border:1px solid var(--bd)}
+.tag{display:inline-block;border-radius:99px;padding:2px 9px;font-size:12px;font-weight:700;background:#eee}
+.agora{background:#fde2e2;color:#a00}.hoje{background:#ffe9c7;color:#8a5200}.semana{background:#e3f1e8;color:#176b3a}
+dialog{border:0;border-radius:14px;padding:18px;width:min(440px,94vw)}dialog::backdrop{background:#0006}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;font:16px system-ui}
+#aviso{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:var(--tx);color:#fff;padding:10px 16px;border-radius:99px;display:none;z-index:20;max-width:92vw}
+</style></head><body>
+<header><h1>📦 Estoque — Líbano Esfiharia</h1><a href="/">← painel</a><button class="btn c" onclick="novoItem()">+ Novo item</button><button class="btn c" onclick="receita()">Receitas</button></header>
+<nav id="abas"></nav>
+<main id="tela"></main>
+<div id="aviso"></div>
+<dialog id="dlg"><form method="dialog" id="frm"></form></dialog>
+<script>
+const $=s=>document.querySelector(s);
+const ABAS=[["resumo","Resumo"],["estoque","Estoque"],["compras","Compras"],["historico","Histórico"]];
+let aba="resumo",DADOS={};
+const h=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const n=x=>(+x).toLocaleString("pt-BR",{maximumFractionDigits:3});
+function aviso(t){const a=$("#aviso");a.textContent=t;a.style.display="block";clearTimeout(aviso.t);aviso.t=setTimeout(()=>a.style.display="none",3500)}
+async function api(cmd,corpo){
+  try{
+    const r=corpo===undefined?await fetch("/api/estoque/"+cmd):await fetch("/api/estoque/"+cmd,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(corpo)});
+    return await r.json();
+  }catch(e){return{ok:false,erro:"Sem conexão com o programa da loja."}}
+}
+function abas(){$("#abas").innerHTML=ABAS.map(([k,t])=>`<button class="${k==aba?"on":""}" onclick="ir('${k}')">${t}</button>`).join("")}
+function ir(k){aba=k;abas();desenhar()}
+async function desenhar(){
+  const T=$("#tela");T.innerHTML='<p class="mut">Carregando…</p>';
+  if(aba=="resumo"){
+    const a=await api("alertas");if(!a.ok){T.innerHTML=erro(a);return}
+    let x="";
+    if(a.indisponiveis.length)x+=`<div class="card baixo"><div class="nome">🚫 Fora do cardápio por falta (a Layla não vende)</div>${a.indisponiveis.map(i=>`<div>${h(i.produto)} <span class="mut">— falta ${h(i.falta.join(", "))}</span></div>`).join("")}</div>`;
+    if(a.abaixo_minimo.length)x+=`<div class="card baixo"><div class="nome">⚠️ Acabando</div>${a.abaixo_minimo.map(i=>`<div>${h(i.item)}: tem <b>${n(i.utilizavel)}</b> ${h(i.unidade)} (mínimo ${n(i.minimo)})</div>`).join("")}</div>`;
+    if(a.vencendo.length)x+=`<div class="card"><div class="nome">⏳ Validade</div>${a.vencendo.map(i=>`<div class="${i.vencido?"venc":""}">${i.vencido?"VENCIDO — ":"vence em "+i.dias+" dia(s) — "}${h(i.item)} lote ${h(i.lote)} (${n(i.saldo)} ${h(i.unidade)}) <button class="btn c" onclick='mov(${JSON.stringify(i.item)},"VENCIMENTO",${JSON.stringify(i.lote)},${i.saldo})'>Dar baixa</button></div>`).join("")}</div>`;
+    T.innerHTML=x||'<div class="card">Tudo em dia: nada acabando e nada vencendo. ✅</div>';
+  }else if(aba=="estoque"){
+    const s=await api("saldos");if(!s.ok){T.innerHTML=erro(s);return}DADOS=s;
+    T.innerHTML=s.itens.map(i=>`<div class="card ${i.abaixo_minimo?"baixo":""}"><div class="lin"><div><div class="nome">${h(i.item)}</div>
+      <div class="mut">mínimo ${n(i.minimo)} ${h(i.unidade)}${i.unidade_compra?` · compra em ${h(i.unidade_compra)} (${n(i.fator)} ${h(i.unidade)})`:""}</div></div>
+      <div class="gr">${n(i.utilizavel)} <span class="mut">${h(i.unidade)}</span></div></div>
+      ${i.lotes.map(l=>`<div class="mut ${l.vencido?"venc":""}">lote ${h(l.lote)}${l.validade?" · vale até "+l.validade.split("-").reverse().join("/"):""} · ${n(l.saldo)}${l.vencido?" (VENCIDO)":""}</div>`).join("")}
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick='mov(${JSON.stringify(i.item)},"ENTRADA")'>＋ Entrada</button>
+      <button class="btn c" onclick='mov(${JSON.stringify(i.item)},"CONSUMO")'>－ Saída</button><button class="btn c" onclick='mov(${JSON.stringify(i.item)},"CONTAGEM")'>Contei</button></div></div>`).join("")||'<div class="card">Nenhum item. Toque em “+ Novo item”.</div>';
+  }else if(aba=="compras"){
+    const c=await api("compras");if(!c.ok){T.innerHTML=erro(c);return}
+    T.innerHTML=c.sugestoes.map(s=>`<div class="card"><div class="lin"><div class="nome">${h(s.item)}</div><span class="tag ${s.urgencia}">${s.urgencia}</span></div>
+      <div>Comprar <b>${s.comprar_em?n(s.comprar_em.quantidade)+" "+h(s.comprar_em.unidade):n(s.comprar)+" "+h(s.unidade)}</b>
+      <span class="mut">· tem ${n(s.saldo)} ${h(s.unidade)}${s.dias_restantes==null?"":" · dura ~"+s.dias_restantes+" dia(s)"}</span></div></div>`).join("")
+      ||'<div class="card">Nada para comprar agora. ✅</div>';
+    T.insertAdjacentHTML("beforeend",`<p class="mut">Calculado pelo consumo dos últimos ${c.janela_dias} dias, cobrindo ${c.dias_cobertura} dias.</p>`);
+  }else{
+    const m=await api("movimentos?limite=80");if(!m.ok){T.innerHTML=erro(m);return}
+    T.innerHTML=m.movimentos.map(x=>`<div class="card"><div class="lin"><div><span class="nome">${h(x.item)}</span> <span class="tag">${h(x.tipo)}</span></div>
+      <b>${x.quantidade>0?"+":""}${n(x.quantidade)} ${h(x.unidade)}</b></div><div class="mut">${h(x.ts)} · lote ${h(x.lote)}${x.motivo?" · "+h(x.motivo):""}${x.pedido?" · pedido "+h(x.pedido):""}${x.fefo_override?" · lote escolhido à mão":""}
+      ${x.tipo!="ESTORNO"?`<button class="btn c" style="float:right;padding:4px 10px" onclick="estornar(${x.id})">Desfazer</button>`:` (desfaz #${x.estorno_de})`}</div></div>`).join("")||'<div class="card">Sem movimentos ainda.</div>';
+  }
+}
+const erro=r=>`<div class="card baixo">${h(r.erro||"Erro")}</div>`;
+function abrir(html,ok){const f=$("#frm");f.innerHTML=html+'<div style="display:flex;gap:8px;margin-top:14px"><button class="btn" value="ok">Salvar</button><button class="btn c" value="x" formnovalidate>Cancelar</button></div>';
+  f.onsubmit=async e=>{if(e.submitter&&e.submitter.value=="x")return;e.preventDefault();const r=await ok(new FormData(f));if(r&&r.ok){$("#dlg").close();aviso("Salvo ✅");desenhar()}else if(r)aviso(r.erro||"Erro")};
+  $("#dlg").showModal()}
+function mov(item,tipo,lote,qtd){
+  const e=tipo=="ENTRADA",ct=tipo=="CONTAGEM";
+  abrir(`<h3>${h(item)}</h3><label>O que aconteceu?</label><select name="tipo"><option value="ENTRADA" ${e?"selected":""}>Chegou (entrada)</option><option value="CONSUMO" ${tipo=="CONSUMO"?"selected":""}>Usei / vendi (saída)</option><option value="PERDA">Perda / quebrou</option><option value="VENCIMENTO" ${tipo=="VENCIMENTO"?"selected":""}>Venceu (jogar fora)</option><option value="CONTAGEM" ${ct?"selected":""}>Contei e o número é outro</option></select>
+    <label>Quantidade</label><input name="q" type="number" step="any" min="0" required value="${qtd??""}">
+    <label>Validade (só para entrada de coisa que vence)</label><input name="validade" type="date">
+    <label>Lote ${lote?"":"(deixe vazio)"}</label><input name="lote" value="${h(lote||"")}"><label>Observação</label><input name="motivo">`,
+  async f=>{const t=f.get("tipo"),q=+f.get("q"),lote=f.get("lote")||undefined,motivo=f.get("motivo")||undefined;
+    if(t=="ENTRADA")return api("entrada",{item,quantidade:q,validade:f.get("validade")||undefined,lote,motivo});
+    if(t=="CONTAGEM"){const c=await api("contar",{item,contado:q,lote});if(!c.ok)return c;aviso("Diferença de "+n(c.diferenca));return api("reconciliar",{id:c.id})}
+    return api("saida",{item,quantidade:q,tipo:t,lote,motivo})})}
+function novoItem(){
+  abrir(`<h3>Novo item</h3><label>Nome</label><input name="nome" required><label>Unidade em que você conta (un, kg, L…)</label><input name="unidade" value="un">
+    <label>Avisar quando tiver até (mínimo)</label><input name="minimo" type="number" step="any" min="0" value="0">
+    <label>Compra em (caixa, fardo… — opcional)</label><input name="uc"><label>Quantas unidades vêm em cada?</label><input name="fator" type="number" step="any" min="0">
+    <label>Dura quantos dias depois de chegar? (opcional)</label><input name="vd" type="number" min="0">`,
+  f=>api("item",{nome:f.get("nome"),unidade:f.get("unidade"),minimo:+f.get("minimo"),unidade_compra:f.get("uc")||undefined,fator:f.get("fator")?+f.get("fator"):undefined,validade_dias:f.get("vd")?+f.get("vd"):undefined}))}
+function receita(){
+  abrir(`<h3>Receita (o que cada produto gasta)</h3><label>Produto como aparece no pedido</label><input name="produto" required placeholder="Ex.: Mussarela">
+    <label>Uma linha por insumo: nome: quantidade</label><textarea name="ins" rows="5" required placeholder="Mussarela (kg): 0,05&#10;Massa de esfiha: 1"></textarea>
+    <p class="mut">Os insumos precisam estar cadastrados. Quando o estoque de um insumo não cobre uma unidade, a Layla para de vender o produto sozinha.</p>`,
+  f=>{const ins=f.get("ins").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.lastIndexOf(":");return{item:l.slice(0,i).trim(),quantidade:parseFloat(l.slice(i+1).replace(",","."))}});
+    if(ins.some(x=>!x.item||!(x.quantidade>0))){aviso("Confira as linhas: nome: quantidade");return null}
+    return api("receita",{produto:f.get("produto"),insumos:ins})})}
+async function estornar(id){if(!confirm("Desfazer este movimento?"))return;const r=await api("estorno",{mov:id});aviso(r.ok?"Desfeito ✅":r.erro);desenhar()}
+abas();desenhar();setInterval(()=>{if(!document.hidden&&!$("#dlg").open)desenhar()},60000);
+</script></body></html>
